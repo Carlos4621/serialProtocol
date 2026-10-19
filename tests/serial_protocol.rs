@@ -1,7 +1,7 @@
-use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 
-use serial_protocol::serial_protocol::{
-    decode, encode, min_decode_output_buffer_size, min_encode_output_buffer_size, ProtocolErrors,
+use serial_protocol::{
+    ProtocolErrors, decode, encode, min_decode_output_buffer_size, min_encode_output_buffer_size,
 };
 
 fn encode_frame(payload: &[u8]) -> Vec<u8> {
