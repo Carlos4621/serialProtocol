@@ -11,7 +11,7 @@ use crc::Crc;
 type CrcType = u16;
 const CRC_ALGORITHM: &crc::Algorithm<CrcType> = &crc::CRC_16_IBM_3740;
 const CRC_CALCULATOR: Crc<CrcType> = Crc::<CrcType>::new(CRC_ALGORITHM);
-const CRC_SIZE_BYTES: usize = 2; // TODO: Podría aprovechar el campo widht de CRC_ALGORITHM para calcularlo
+const CRC_SIZE_BYTES: usize = size_of::<CrcType>();
 
 type DelimiterType = u8;
 const DELIMITER: DelimiterType = 0x00;
