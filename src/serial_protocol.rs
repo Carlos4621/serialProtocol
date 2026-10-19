@@ -1,3 +1,10 @@
+/*
+    TODO:
+
+    - Descubrir si puedo concatenar el delimitador en el iterador que contiene la entrada codificada para evitar su adición solitaria
+    - Agregar documentación
+*/
+
 use cobs2::cobsr;
 use crc::Crc;
 
@@ -19,7 +26,7 @@ pub enum ProtocolErrors {
     InputWithoutDelimiter,
 }
 
-pub fn encode(input: &[u8], output: &mut [u8]) -> Result<usize, ProtocolErrors> {
+pub fn encode<'a>(input: & [u8], output: &'a mut [u8]) -> Result<&'a [u8], ProtocolErrors> {
     if output.len() < min_encode_output_buffer_size(input.len()) {
         return Err(ProtocolErrors::OutputBufferTooSmall);
     }
@@ -30,13 +37,12 @@ pub fn encode(input: &[u8], output: &mut [u8]) -> Result<usize, ProtocolErrors> 
 
     let bytes_written = fill_buffer_with_iterator(output, encoded)?;
 
-    // TODO: Podría usar chain en el encoded para que el delimitador se coloque en la misma operación anterior?
     output[bytes_written] = DELIMITER;
 
-    Ok(bytes_written + DELIMITER_SIZE)
+    Ok(&output[..bytes_written + DELIMITER_SIZE])
 }
 
-pub fn decode(input: &[u8], output: &mut [u8]) -> Result<usize, ProtocolErrors> {
+pub fn decode<'a>(input: &[u8], output: &'a mut [u8]) -> Result<&'a [u8], ProtocolErrors> {
     if input.len() < MIN_INPUT_BUFFER_SIZE {
         return Err(ProtocolErrors::InputBufferTooSmall);
     }
@@ -52,7 +58,7 @@ pub fn decode(input: &[u8], output: &mut [u8]) -> Result<usize, ProtocolErrors> 
 
     verify_crc(&output[0..bytes_written])?;
 
-    Ok(bytes_written - CRC_SIZE_BYTES)
+    Ok(&output[..(bytes_written - CRC_SIZE_BYTES)])
 }
 
 pub const fn min_encode_output_buffer_size(lenght_to_encode: usize) -> usize {

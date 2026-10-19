@@ -1,24 +1,23 @@
-use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::panic::{catch_unwind, AssertUnwindSafe};
 
 use serial_protocol::serial_protocol::{
-    ProtocolErrors, decode, encode, min_decode_output_buffer_size, min_encode_output_buffer_size,
+    decode, encode, min_decode_output_buffer_size, min_encode_output_buffer_size, ProtocolErrors,
 };
 
 fn encode_frame(payload: &[u8]) -> Vec<u8> {
     let mut frame = vec![0; min_encode_output_buffer_size(payload.len())];
-    let written = match encode(payload, &mut frame) {
-        Ok(written) => written,
+    let encoded = match encode(payload, &mut frame) {
+        Ok(encoded) => encoded,
         Err(_) => panic!("a buffer sized by min_encode_output_buffer_size must be sufficient"),
     };
-    frame.truncate(written);
-    frame
+    encoded.to_vec()
 }
 
-fn assert_error_is(result: Result<usize, ProtocolErrors>, expected: fn(&ProtocolErrors) -> bool) {
+fn assert_error_is<T>(result: Result<T, ProtocolErrors>, expected: fn(&ProtocolErrors) -> bool) {
     match result {
         Err(error) if expected(&error) => {}
         Err(_) => panic!("the operation returned a different protocol error"),
-        Ok(written) => panic!("the operation unexpectedly succeeded and wrote {written} bytes"),
+        Ok(_) => panic!("the operation unexpectedly succeeded"),
     }
 }
 
@@ -46,13 +45,12 @@ fn non_empty_payloads_round_trip_with_an_exact_decode_buffer() {
         // The decoded representation contains the payload plus its two CRC bytes.
         let mut decoded = vec![0xA5; payload.len() + 2];
 
-        let written = match decode(&frame, &mut decoded) {
-            Ok(written) => written,
+        let decoded_payload = match decode(&frame, &mut decoded) {
+            Ok(decoded_payload) => decoded_payload,
             Err(_) => panic!("a frame produced by encode must be accepted by decode"),
         };
 
-        assert_eq!(written, payload.len());
-        assert_eq!(&decoded[..written], payload);
+        assert_eq!(decoded_payload, payload);
     }
 }
 
@@ -61,12 +59,12 @@ fn empty_payload_round_trips() {
     let frame = encode_frame(b"");
     let mut decoded = [0xA5; 2];
 
-    let written = match decode(&frame, &mut decoded) {
-        Ok(written) => written,
+    let decoded_payload = match decode(&frame, &mut decoded) {
+        Ok(decoded_payload) => decoded_payload,
         Err(_) => panic!("decode rejected the empty frame produced by encode"),
     };
 
-    assert_eq!(written, 0);
+    assert!(decoded_payload.is_empty());
 }
 
 #[test]
@@ -75,13 +73,12 @@ fn decode_buffer_size_helper_is_sufficient_for_a_valid_frame() {
     let frame = encode_frame(payload);
     let mut decoded = vec![0xA5; min_decode_output_buffer_size(frame.len())];
 
-    let written = match decode(&frame, &mut decoded) {
-        Ok(written) => written,
+    let decoded_payload = match decode(&frame, &mut decoded) {
+        Ok(decoded_payload) => decoded_payload,
         Err(_) => panic!("the decode buffer size advertised by the API was not usable"),
     };
 
-    assert_eq!(written, payload.len());
-    assert_eq!(&decoded[..written], payload);
+    assert_eq!(decoded_payload, payload);
 }
 
 #[test]
@@ -94,11 +91,13 @@ fn encode_buffer_size_helper_is_sufficient_at_a_cobs_block_boundary() {
     let advertised_size = min_encode_output_buffer_size(payload.len());
     let mut frame = vec![0; advertised_size];
 
-    let outcome = catch_unwind(AssertUnwindSafe(|| encode(&payload, &mut frame)));
+    let outcome = catch_unwind(AssertUnwindSafe(|| {
+        encode(&payload, &mut frame).map(|encoded| encoded.len())
+    }));
 
     match outcome {
-        Ok(Ok(written)) => assert!(
-            written <= advertised_size,
+        Ok(Ok(encoded_len)) => assert!(
+            encoded_len <= advertised_size,
             "encode wrote more than the size advertised by its helper"
         ),
         Ok(Err(_)) => panic!("encode rejected the size advertised by its own helper"),
@@ -168,7 +167,9 @@ fn decode_rejects_malformed_cobs_without_panicking() {
     let malformed_frame = [0x00, 0x01, 0x01, 0x00];
     let mut output = [0xFF, 0xFF];
 
-    let outcome = catch_unwind(AssertUnwindSafe(|| decode(&malformed_frame, &mut output)));
+    let outcome = catch_unwind(AssertUnwindSafe(|| {
+        decode(&malformed_frame, &mut output).map(|decoded| decoded.len())
+    }));
 
     match outcome {
         Ok(result) => assert_error_is(result, |error| {
